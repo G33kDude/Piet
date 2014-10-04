@@ -1,7 +1,7 @@
 ﻿; Start gdi+
 If !pToken := Gdip_Startup()
 {
-	;MsgBox, 48, gdiplus error!, Gdiplus failed to start. Please ensure you have gdiplus on your system
+	MsgBox, 48, gdiplus error!, Gdiplus failed to start. Please ensure you have gdiplus on your system
 	ExitApp
 }
 OnExit, ExitSub
@@ -65,32 +65,25 @@ DP := 1 ; [Up, RIGHT, Down, Left]
 
 Pixel := [1, 1]
 
+DllCall("AllocConsole")
+cStdOut := FileOpen("CONOUT$", "w")
+
 Wait := 0
 Loop
 {
 	Codel := GetCodel(Pixel[1], Pixel[2], Grid)
-	;Print(Stack)
 	;DrawCodel(Codel, Grid)
-	;MsgBox
 	
 	Wait := 0
 	While Wait < 8
 	{
-		;Print("CC: " CC, "DP: " DP)
-		;Print("Getting next pixel")
 		NextPixel := GetNextPixel(DP, CC, Codel)
-		;Print("Got next pixel", NextPixel)
-		;Print("Color", Grid[NextPixel*])
 		
 		if (PointOutBounds(NextPixel, 1, 1, Width, Height)
 			|| Grid[NextPixel*] == "000000")
 			{
 				CC := !CC
-				;Print("CC: " CC, "DP: " DP)
-				;Print("Getting next pixel")
 				NextPixel := GetNextPixel(DP, CC, Codel)
-				;Print("Got next pixel", NextPixel)
-				;Print("Color", Grid[NextPixel*])
 				
 				if (PointOutBounds(NextPixel, 1, 1, Width, Height)
 					|| Grid[NextPixel*] == "000000")
@@ -111,7 +104,6 @@ Loop
 	
 	While (Grid[NextPixel*] == "FFFFFF")
 	{
-		;MsgBox, white
 		TmpPixel := NextPixel.Clone()
 		
 		Wait := 0
@@ -139,116 +131,85 @@ Loop
 		
 		Pixel := NextPixel := TmpPixel
 		
-		;Print("Found pixel after slide:", NextPixel, "Of color", Grid[NewPixel*])
 	}
 	
 	Op := GetOperation(Grid[Pixel*], Grid[NextPixel*])
 	
 	if (Op == "0,0")
 	{
-		Print("nop")
-		;MsgBox Nop
 	}
 	else if (Op == "0,1")
 	{
 		Stack.Insert(Codel.Count)
-		Print("push")
-		;MsgBox, Push
 	}
 	else if (Op == "0,2" && Stack.MaxIndex() >= 1)
 	{
 		Stack.Remove()
-		Print("pop")
-		;MsgBox, Pop
 	}
 	else if (Op == "1,0" && Stack.MaxIndex() >= 2)
 	{
 		first := Stack.Remove()
 		second := Stack.Remove()
 		Stack.Insert(second + first)
-		Print("add")
-		;MsgBox, Add
 	}
 	else if (Op == "1,1" && Stack.MaxIndex() >= 2)
 	{
 		subtrahend := Stack.Remove()
 		minuend := Stack.Remove()
 		Stack.Insert(minuend - subtrahend)
-		Print("sub")
-		;MsgBox, Sub
 	}
 	else if (Op == "1,2" && Stack.MaxIndex() >= 2)
 	{
 		first := Stack.Remove()
 		second := Stack.Remove()
 		Stack.Insert(second * first)
-		Print("mul")
-		;MsgBox, mul
 	}
 	else if (Op == "2,0" && Stack.MaxIndex() >= 2)
 	{
 		Divisor := Stack.Remove()
 		Dividend := Stack.Remove()
 		Stack.Insert(Dividend // Divisor) ; Floor division
-		Print("div")
-		;MsgBox, div
 	}
 	else if (Op == "2,1" && Stack.MaxIndex() >= 2)
 	{
 		Divisor := Stack.Remove()
 		Dividend := Stack.Remove()
 		Stack.Insert(Mod(Dividend, Divisor)) ; Floor division
-		Print("mod")
-		;MsgBox, mod
 	}
 	else if (Op == "2,2" && Stack.MaxIndex() >= 1)
 	{
 		Stack.Insert(!Stack.Remove())
-		Print("not")
-		;MsgBox, not
 	}
 	else if (Op == "3,0" && Stack.MaxIndex() >= 2)
 	{
 		First := Stack.Remove()
 		Second := Stack.Remove()
 		Stack.Insert(Second > First)
-		Print("grtr")
-		;MsgBox, grtr
 	}
 	else if (Op == "3,1" && Stack.MaxIndex() >= 1)
 	{
 		DP := RotateDP(DP, Stack.Remove())
-		Print("ptr")
-		;MsgBox, ptr
 	}
 	else if (Op == "3,2" && Stack.MaxIndex() >= 1)
 	{
 		Loop, % Abs(Stack.Remove())
 			CC := !CC
-		Print("swch")
-		;MsgBox, swch
 	}
 	else if (Op == "4,0" && Stack.MaxIndex() >= 1)
 	{
 		Stack.Insert(Stack[Stack.MaxIndex()])
-		Print("dup")
-		;MsgBox, dup
 	}
 	else if (Op == "4,1" && Stack.MaxIndex() >= 2)
 	{
-		Print(Stack)
 		Roll := []
 		Rolls := Stack.Remove()
 		Depth := Stack.Remove()
 		
-		Print(Stack)
-		Print("Rolling " Depth " items cyclically " Rolls " rolls")
 		
 		Max := Stack.MaxIndex()
 		if (Rolls != 0 && Depth > 0 && Depth <= Max)
 		{
 			DepthPos := Max - Depth + 1
-			Print(Max, DepthPos)
 			if (Rolls > 0)
 				Loop, % Rolls
 					Stack.Insert(DepthPos, Stack.Remove())
@@ -257,9 +218,6 @@ Loop
 					Stack.Insert(Stack.Remove(DepthPos))
 		}
 		
-		Print(Stack)
-		Print("Roll")
-		;MsgBox, roll
 	}
 	else if (Op == "4,2")
 	{
@@ -271,31 +229,27 @@ Loop
 			StdIn := SubStr(StdIn, StrLen(Match)+1)
 			Stack.Insert(Match)
 		}
-		print("stack", Stack)
-		Print("StdIn |" StdIn "|")
-		;Print("inN")
-		MsgBox, inN
 	}
 	else if (Op == "5,0")
 	{
 		if !StdIn
 		{
-			InputBox, StdIn,, Out of input`, add some more please
-			StdIn .= "`n"
+			cStdOut.Write("`n>>> "), cStdOut.__Handle
+			
+			cStdIn := FileOpen("CONIN$", "r")
+			StdIn .= cStdIn.ReadLine()
+			
+			cStdOut.Write("`n"), cStdOut.__Handle
 		}
 		
 		Stack.Insert(Asc(SubStr(StdIn, 1, 1)))
 		StdIn := SubStr(StdIn, 2)
-		Print("inC")
-		;MsgBox, inC
 	}
 	else if (Op == "5,1" && Stack.MaxIndex() >= 1)
 	{
 		Num := Stack.Remove()
 		StdOut .= " " Num " "
-		Print(Num " ", "")
-		Print("outN")
-		;MsgBox, outN %stdOut%
+		cStdOut.Write(" " Num " "), cStdOut.__Handle
 	}
 	else if (Op == "5,2" && Stack.MaxIndex() >= 1)
 	{
@@ -303,26 +257,18 @@ Loop
 		Chr := Chr(Num)
 		
 		StdOut .= Chr
-		
-		Print(NextPixel)
-		Print(Chr, "")
-		;MsgBox, outC`n%StdOut%
+		cStdOut.Write(Chr), cStdOut.__Handle
 	}
 	Else
 	{
-		Print("UNKOWN OPERATOR:", Op)
 		MsgBox, % Op
 	}
 	
-	Print("Stack: ", Stack)
-	Print("`n`n`n")
-	MsgBox, step
+	;MsgBox, Step
 	Pixel := NextPixel
 }
 
 MsgBox, Wait timed out
-Print(Stack)
-;Print(StdOut)
 MsgBox, % """" StdOut """"
 ExitApp
 return
@@ -337,15 +283,12 @@ GetOperation(OldColor, NewColor)
 	OldPos := ColorToIndex[OldColor].Clone()
 	NewPos := ColorToIndex[NewColor].Clone()
 	
-	;Print(OldPos, NewPos)
 	
 	if (NewPos[1] < OldPos[1])
 		NewPos[1] += 6
 	if (NewPos[2] < OldPos[2])
 		NewPos[2] += 3
 	
-	;Print(OldColor, NewColor)
-	;Print(OldPos, NewPos)
 	
 	
 	Diff := NewPos[1] - OldPos[1]
@@ -404,16 +347,11 @@ AddDPToPoint(Point, DP)
 
 RotateDP(DP, n=1)
 {
-	;MsgBox Rotating
-	;print("ROTATING")
-	;print("Was " dp)
 	DP += n
 	While DP > 3
 		DP -= 4
 	While DP < 0
 		DP += 4
-	;print ("Is now " DP)
-	;MsgBox Rotating
 	return DP
 }
 
@@ -428,7 +366,6 @@ DrawCodel(Codel, Grid)
 		Gui, Codel:Show
 		GText := True
 	}
-	;Print(Codel.Count)
 	Out := []
 	for x, Column in Grid
 	{
