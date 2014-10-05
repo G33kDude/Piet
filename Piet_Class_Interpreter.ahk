@@ -96,135 +96,6 @@ Loop
 	
 	Op := GetOperation(Grid[Pixel*], Grid[NextPixel*])
 	
-	if (Op == "0,0")
-	{
-	}
-	else if (Op == "0,1")
-	{
-		Stack.Insert(Codel.Count)
-	}
-	else if (Op == "0,2" && Stack.MaxIndex() >= 1)
-	{
-		Stack.Remove()
-	}
-	else if (Op == "1,0" && Stack.MaxIndex() >= 2)
-	{
-		first := Stack.Remove()
-		second := Stack.Remove()
-		Stack.Insert(second + first)
-	}
-	else if (Op == "1,1" && Stack.MaxIndex() >= 2)
-	{
-		subtrahend := Stack.Remove()
-		minuend := Stack.Remove()
-		Stack.Insert(minuend - subtrahend)
-	}
-	else if (Op == "1,2" && Stack.MaxIndex() >= 2)
-	{
-		first := Stack.Remove()
-		second := Stack.Remove()
-		Stack.Insert(second * first)
-	}
-	else if (Op == "2,0" && Stack.MaxIndex() >= 2)
-	{
-		Divisor := Stack.Remove()
-		Dividend := Stack.Remove()
-		Stack.Insert(Dividend // Divisor) ; Floor division
-	}
-	else if (Op == "2,1" && Stack.MaxIndex() >= 2)
-	{
-		Divisor := Stack.Remove()
-		Dividend := Stack.Remove()
-		Stack.Insert(Mod(Dividend, Divisor)) ; Floor division
-	}
-	else if (Op == "2,2" && Stack.MaxIndex() >= 1)
-	{
-		Stack.Insert(!Stack.Remove())
-	}
-	else if (Op == "3,0" && Stack.MaxIndex() >= 2)
-	{
-		First := Stack.Remove()
-		Second := Stack.Remove()
-		Stack.Insert(Second > First)
-	}
-	else if (Op == "3,1" && Stack.MaxIndex() >= 1)
-	{
-		DP := RotateDP(DP, Stack.Remove())
-	}
-	else if (Op == "3,2" && Stack.MaxIndex() >= 1)
-	{
-		Loop, % Abs(Stack.Remove())
-			CC := !CC
-	}
-	else if (Op == "4,0" && Stack.MaxIndex() >= 1)
-	{
-		Stack.Insert(Stack[Stack.MaxIndex()])
-	}
-	else if (Op == "4,1" && Stack.MaxIndex() >= 2)
-	{
-		Roll := []
-		Rolls := Stack.Remove()
-		Depth := Stack.Remove()
-		
-		
-		Max := Stack.MaxIndex()
-		if (Rolls != 0 && Depth > 0 && Depth <= Max)
-		{
-			DepthPos := Max - Depth + 1
-			if (Rolls > 0)
-				Loop, % Rolls
-					Stack.Insert(DepthPos, Stack.Remove())
-			else
-				Loop, % Abs(Rolls)
-					Stack.Insert(Stack.Remove(DepthPos))
-		}
-		
-	}
-	else if (Op == "4,2")
-	{
-		if !StdIn
-			MsgBox, outta stdin
-		
-		if (RegExMatch(StdIn, "^\-?\d+", Match))
-		{
-			StdIn := SubStr(StdIn, StrLen(Match)+1)
-			Stack.Insert(Match)
-		}
-	}
-	else if (Op == "5,0")
-	{
-		if !StdIn
-		{
-			cStdOut.Write("`n>>> "), cStdOut.__Handle
-			
-			cStdIn := FileOpen("CONIN$", "r")
-			StdIn .= cStdIn.ReadLine()
-			
-			cStdOut.Write("`n"), cStdOut.__Handle
-		}
-		
-		Stack.Insert(Asc(SubStr(StdIn, 1, 1)))
-		StdIn := SubStr(StdIn, 2)
-	}
-	else if (Op == "5,1" && Stack.MaxIndex() >= 1)
-	{
-		Num := Stack.Remove()
-		StdOut .= " " Num " "
-		cStdOut.Write(" " Num " "), cStdOut.__Handle
-	}
-	else if (Op == "5,2" && Stack.MaxIndex() >= 1)
-	{
-		Num := Stack.Remove()
-		Chr := Chr(Num)
-		
-		StdOut .= Chr
-		cStdOut.Write(Chr), cStdOut.__Handle
-	}
-	Else
-	{
-		MsgBox, % Op
-	}
-	
 	;MsgBox, Step
 	Pixel := NextPixel
 }
@@ -366,63 +237,6 @@ DrawCodel(Codel, Grid)
 	GuiControl, Codel:, GText, %OutText%
 }
 
-GetCodel(x, y, Grid)
-{
-	Color := Grid[x, y]
-	Stack := [[x, y]]
-	Out := {"Color": Color}
-	
-	i := 0
-	Out[x, y] := ++i
-	
-	while (Pos := Stack.Remove(1))
-	{
-		x := Pos[1], y := Pos[2]
-		
-		if (Grid[x+1, y] == Color && !Out[x+1, y])
-			Stack.Insert([x+1, y]), Out[x+1, y] := ++i
-		if (Grid[x-1, y] == Color && !Out[x-1, y])
-			Stack.Insert([x-1, y]), Out[x-1, y] := ++i
-		if (Grid[x, y+1] == Color && !Out[x, y+1])
-			Stack.Insert([x, y+1]), Out[x, y+1] := ++i
-		if (Grid[x, y-1] == Color && !Out[x, y-1])
-			Stack.Insert([x, y-1]), Out[x, y-1] := ++i
-	}
-	
-	Out["Count"] := i
-	return Out
-}
-
-GetHCorner(Codel, Left, Top)
-{
-	Codel := Codel.Clone()
-	Codel.Remove("Color")
-	Codel.Remove("Count")
-	for x in Codel
-		if Left ; If leftmost, break immediately
-			break
-	for y in Codel[x]
-		if Top ; If topmost, break immediately (top is lower on Y axis)
-			break
-	return [x, y]
-}
-
-GetVCorner(Codel, Top, Left)
-{
-	Codel := Codel.Clone()
-	Codel.Remove("Color")
-	Codel.Remove("Count")
-	Codel := ReverseGrid(Codel)
-	
-	for y in Codel
-		if Top
-			break
-	for x in Codel[y]
-		if Left
-			break
-	return [x, y]
-}
-
 ReverseGrid(Grid)
 {
 	Out := []
@@ -445,14 +259,14 @@ PointOutBounds(Point, x1, y1, x2, y2)
 Escape::ExitApp
 
 
-class piet
+class Piet
 {
 	__New(FilePath, CodelSize)
 	{
 		this.ParseFile(FilePath, CodelSize)
 		
 		this.Stack := []
-		this.Pixel := [1, 1] ; Top left
+		this.Point := [1, 1] ; Top left
 		this.StdIn := ""
 		
 		this.CC := 0 ; [LEFT, Right]
@@ -490,17 +304,25 @@ class piet
 		return [this.Width, this.Height]
 	}
 	
-	Print(String)
+	StdOut(String)
 	{
-		StdOut := FileOpen("CONOUT$", "w")
-		StdOut.Write(String), StdOut.__Handle
-		return StdOut
+		ConOut := FileOpen("CONOUT$", "w")
+		ConOut.Write(String), ConOut.__Handle
+		return ConOut
 	}
 	
-	ReadLine()
+	GetStdIn()
 	{
-		StdIn := FileOpen("CONIN$", "r")
-		return StdIn.ReadLine()
+		this.StdOut("`n>>> ")
+		ConIn := FileOpen("CONIN$", "r")
+		this.StdIn .= ConIn.ReadLine()
+		this.StdOut("`n")
+		return ConIn
+	}
+	
+	Step()
+	{ ; TODO
+		Codel := new Piet.Codel(this.Point[1], this.Point[2], this.Grid)
 	}
 	
 	NOP()
@@ -602,14 +424,82 @@ class piet
 		if !this.StdIn
 			this.GetStdIn()
 		
-		return 
+		Char := Asc(SubStr(this.StdIn, 1, 1))
+		this.StdIn := SubStr(this.StdIn, 2)
+		
+		return this.StdIn
 	}
 	OUTN()
 	{
-		
+		Num := this.Stack.Remove()
+		this.StdOut(" " Num " ")
+		return Num
 	}
 	OUTC()
 	{
+		Char := Chr(this.Stack.Remove())
+		this.StdOut(Char)
+		return Char
+	}
+	
+	class Codel
+	{
+		__New(x, y, Grid)
+		{
+			this.Color := Grid[x, y]
+			Flood := [[x, y]]
+			
+			i := 0
+			this.Grid[x, y] := ++i ; Not sure why I use i for these values instead of true
+			
+			while Pos := Flood.Remove()
+			{
+				x := Pos[1], y := Pos[2]
+				
+				for each, Dir in [[1, 0], [-1, 0], [0, 1], [0, -1]]
+				{
+					nx := x+Dir[1], ny := y+Dir[2]
+					if (Grid[nx, ny] == this.Color && !this.Grid[nx, ny])
+						Flood.Insert([nx, ny]), this.Grid[nx, ny] := ++i
+				}
+			}
+			
+			this.Count := i
+		}
 		
+		GetCorner(DP, CC)
+		{ ; TODO
+			if DP == 1 ; Up
+			{
+				
+			}
+		}
+		
+		GetHCorner(Left, Top)
+		{ ; TO SCRAP
+			for x in this.Grid
+				if Left ; If leftmost, break immediately
+					break
+			for y in Codel[x]
+				if Top ; If topmost, break immediately (top is lower on Y axis)
+					break
+			return [x, y]
+		}
+		
+		GetVCorner(Codel, Top, Left)
+		{ ; TO SCRAP
+			Codel := Codel.Clone()
+			Codel.Remove("Color")
+			Codel.Remove("Count")
+			Codel := ReverseGrid(Codel)
+			
+			for y in Codel
+				if Top
+					break
+			for x in Codel[y]
+				if Left
+					break
+			return [x, y]
+		}
 	}
 }
