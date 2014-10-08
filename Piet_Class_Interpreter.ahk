@@ -8,17 +8,14 @@ If !pToken := Gdip_Startup()
 }
 OnExit, ExitSub
 
-IndexToColor := [["FFC0C0", "FF0000", "C00000"]
-, ["FFFFC0", "FFFF00", "C0C000"]
-, ["C0FFC0", "00FF00", "00C000"]
-, ["C0FFFF", "00FFFF", "00C0C0"]
-, ["C0C0FF", "0000FF", "0000C0"]
-, ["FFC0FF", "FF00FF", "C000C0"]]
-
-ColorToIndex := []
-for x, Column in IndexToColor
-	for y, Color in Column
-		ColorToIndex[Color] := [x, y]
+; Colors are organized in a vertical column
+;   L  M  D 
+; R 11 21 31
+; Y 12 22 32
+; G 13 23 33
+; C 14 24 34
+; B 15 25 35
+; M 16 26 36
 
 CodelSize := 1
 if %1%
@@ -26,8 +23,7 @@ if %1%
 else
 	FileSelectFile, sFile
 
-Gdip_Shutdown(pToken)
-
+MyPiet := new Piet(sFile, 1)
 
 Wait := 0
 Loop
@@ -106,86 +102,8 @@ ExitApp
 return
 
 ExitSub:
+Gdip_Shutdown(pToken)
 ExitApp
-
-GetOperation(OldColor, NewColor)
-{
-	global IndexToColor, ColorToIndex
-	
-	OldPos := ColorToIndex[OldColor].Clone()
-	NewPos := ColorToIndex[NewColor].Clone()
-	
-	
-	if (NewPos[1] < OldPos[1])
-		NewPos[1] += 6
-	if (NewPos[2] < OldPos[2])
-		NewPos[2] += 3
-	
-	
-	
-	Diff := NewPos[1] - OldPos[1]
-	. "," NewPos[2] - OldPos[2]
-	
-	return Diff
-}
-
-GetNextPixel(DP, CC, Codel)
-{
-	if (DP == 0) ; Up
-	{
-		if CC ; Right
-			Pixel := GetVCorner(Codel, True, False) ; Top Right
-		else ; Left
-			Pixel := GetVCorner(Codel, True, True) ; Top Left
-	}
-	if (DP == 1) ; Right
-	{
-		if CC ; Right
-			Pixel := GetHCorner(Codel, False, False) ; Right Bottom
-		else ; Left
-			Pixel := GetHCorner(Codel, False, True) ; Right Top
-	}
-	else if (DP == 2) ; Down
-	{
-		if CC ; Right 
-			Pixel := GetVCorner(Codel, False, True) ; Bottom Left
-		else ; Left
-			Pixel := GetVCorner(Codel, False, False) ; Bottom Right
-	}
-	else if (DP == 3) ; Left
-	{
-		if CC ; Right
-			Pixel := GetHCorner(Codel, True, True) ; Left Top
-		else ; Left
-			Pixel := GetHCorner(Codel, True, False) ; Left Bottom
-	}
-	
-	return AddDPToPoint(Pixel, DP)
-}
-
-AddDPToPoint(Point, DP)
-{
-	Point := Point.Clone()
-	if (DP == 0)
-		Point[2] -= 1
-	if (DP == 1)
-		Point[1] += 1
-	if (DP == 2)
-		Point[2] += 1
-	if (DP == 3)
-		Point[1] -= 1
-	return Point
-}
-
-RotateDP(DP, n=1)
-{
-	DP += n
-	While DP > 3
-		DP -= 4
-	While DP < 0
-		DP += 4
-	return DP
-}
 
 DrawCodel(Codel, Grid)
 {
@@ -204,7 +122,7 @@ DrawCodel(Codel, Grid)
 		for y, Color in Column
 		{
 			if (Codel[x, y])
-				Out[y, x] := "â™¥"
+				Out[y, x] := "+"
 			Else
 			{
 				if Color in FFC0C0,FF0000,C00000
@@ -237,27 +155,15 @@ DrawCodel(Codel, Grid)
 	GuiControl, Codel:, GText, %OutText%
 }
 
-ReverseGrid(Grid)
-{
-	Out := []
-	for x, Column in Grid
-		for y, Value in Column
-			Out[y, x] := Value
-	return Out
-}
-
-PointOutBounds(Point, x1, y1, x2, y2)
+PointInBounds(Point, x1, y1, x2, y2)
 {
 	if (Point[1] < x1 || Point[1] > x2)
-		return true
+		return false
 	if (Point[2] < y1 || Point[2] > y2)
-		return true
+		return false
 	
-	return false
+	return true
 }
-
-Escape::ExitApp
-
 
 class Piet
 {
@@ -267,10 +173,19 @@ class Piet
 		
 		this.Stack := []
 		this.Point := [1, 1] ; Top left
-		this.StdIn := ""
+		this.StdIn := "" ; Possible other name: Buffer
 		
 		this.CC := 0 ; [LEFT, Right]
 		this.DP := 1 ; [Up, RIGHT, Down, Left]
+		
+		this.Operations := [[this.NOP, this.PUSH, this.POP]
+		,[this.ADD, this.SUB, this.MUL]
+		,[this.DIV, this.MOD, this.NOT]
+		,[this.GRTR, this.PTR, this.SWCH]
+		,[this.DUP, this.ROLL, this.INN]
+		,[this.INC, this.OUTN, this.OUTC]]
+		
+		return this.Execute()
 	}
 	
 	ParseFile(FilePath, CodelSize)
@@ -320,11 +235,110 @@ class Piet
 		return ConIn
 	}
 	
-	Step()
-	{ ; TODO
-		Codel := new Piet.Codel(this.Point[1], this.Point[2], this.Grid)
+	Execute()
+	{
+		Try
+		{
+			Loop
+				this.Step()
+			MsgBox Stepped
+		}
+		Catch e
+			throw e
+		Finally
+			return
 	}
 	
+	Step()
+	{ ; TODO: Finish this
+		
+		; I should precompute and cache all codels
+		Codel := new Piet.Codel(this.Point[1], this.Point[2], this.Grid)
+		
+		; Find next blob outside codel. Could be cached perhaps?
+		Wait := 0
+		Loop
+		{
+			NextPixel := Codel.Corners[this.DP, this.CC]
+			
+			if PointInBounds(NextPixel, 1, 1, Width, Height)
+			{
+				if (Grid[NextPixel*] == "000000")
+				{ ; This CC option is a wall, try the other one
+					this.ToggleCC()
+					NextPixel := Codel.Corners[this.DP, this.CC]
+					if (Grid[NextPixel*] == "000000")
+					{ ; Both CC options are walls
+						this.RotateDP()
+						Wait++
+					}
+					else ; Success, not a wall
+						Break
+				}
+				else ; Success, not a wall
+					Break
+			}
+			else
+			{ ; This direction is out of bounds
+				this.RotateDP()
+				Wait++
+			}
+			
+			if (Wait > 8)
+				throw Exception("Program stuck")
+		}
+		
+		; Now we need to glide across white
+		
+		; Get the operations, then execute it
+		Operation := this.GetOperation(Codel.Color, Grid[NextPixel*])
+		this.ExecuteOperation(Operation)
+	}
+	
+	ExecuteOperation(Operation)
+	{
+		; Pull the operation from the table of operations
+		; then call the method by its function pointer
+		; making sure to pass the invisible parameter "this"
+		return this.Operations[Operation].(this)
+	}
+	
+	GetOperation(OldColor, NewColor)
+	{
+		static ColorToIndex := {"FFC0C0": [1, 1], "FF0000": [2, 1], "C00000": [3, 1]
+		,"FFFFC0": [1, 2], "FFFF00": [2, 2], "C0C000": [3, 2]
+		,"C0FFC0": [1, 3], "00FF00": [2, 3], "00C000": [3, 3]
+		,"C0FFFF": [1, 4], "00FFFF": [2, 4], "00C0C0": [3, 4]
+		,"C0C0FF": [1, 5], "0000FF": [2, 5], "0000C0": [3, 5]
+		,"FFC0FF": [1, 6], "FF00FF": [2, 6], "C000C0": [3, 6]}
+		
+		OldPos := ColorToIndex[OldColor].Clone()
+		NewPos := ColorToIndex[NewColor].Clone()
+		
+		if (NewPos[1] < OldPos[1])
+			NewPos[1] += 3
+		if (NewPos[2] < OldPos[2])
+			NewPos[2] += 6
+		
+		return [NewPos[1] - OldPos[1] + 1, NewPos[2] - OldPos[2] + 1)
+	}
+	
+	ToggleCC()
+	{
+		return this.CC := !this.CC
+	}
+	
+	RotateDP(n=1)
+	{ ; TODO: Elegant this
+		this.DP += n
+		While this.DP > 3
+			this.DP -= 4
+		While this.DP < 0
+			this.DP += 4
+		return this.DP
+	}
+	
+	;{ Operations
 	NOP()
 	{
 		return
@@ -441,6 +455,7 @@ class Piet
 		this.StdOut(Char)
 		return Char
 	}
+	;}
 	
 	class Codel
 	{
@@ -489,16 +504,16 @@ class Piet
 				{
 					for y in this.Grid[x]
 						if Flag
-							Flag := False, this.Corners[3, 1] := [x, y] ; Left Top (DP 3 CC 1)
-					this.Corners[3, 0] := [x, y] ; Left Bottom (DP 3 CC 0)
+							Flag := False, this.Corners[3, 1] := [x-1, y] ; Left Top (DP 3 CC 1)
+					this.Corners[3, 0] := [x-1, y] ; Left Bottom (DP 3 CC 0)
 				}
 			}
 			
 			Flag := True
 			for y in this.Grid[x]
 				if Flag
-					Flag := False, this.Corners[1, 0] := [x, y] ; Right Top (DP 1 CC 0)
-			this.Corners[1, 1] := [x, y] ; Right Bottom (DP 1 CC 1)
+					Flag := False, this.Corners[1, 0] := [x+1, y] ; Right Top (DP 1 CC 0)
+			this.Corners[1, 1] := [x+1, y] ; Right Bottom (DP 1 CC 1)
 		}
 		
 		CalculateVCorners()
@@ -510,16 +525,18 @@ class Piet
 				{
 					for x in this.ReverseGrid[y]
 						if Flag
-							Flag := False, this.Corners[0, 0] := [x, y] ; Top left (DP 0 CC 0)
-					this.Corners[0, 1] := [x, y] ; Top Right (DP 0 CC 1)
+							Flag := False, this.Corners[0, 0] := [x, y-1] ; Top left (DP 0 CC 0)
+					this.Corners[0, 1] := [x, y-1] ; Top Right (DP 0 CC 1)
 				}
 			}
 			
 			Flag := True
 			for x in this.ReverseGrid[y]
 				if Flag
-					Flag := False, this.Corners[2, 1] ; Bottom Left (DP 2 CC 1)
-			this.Corners[2, 0] := [x, y] ; Bottom Right (DP 2 CC 0)
+					Flag := False, this.Corners[2, 1] := [x, y+1] ; Bottom Left (DP 2 CC 1)
+			this.Corners[2, 0] := [x, y+1] ; Bottom Right (DP 2 CC 0)
 		}
 	}
 }
+
+Escape::ExitApp
