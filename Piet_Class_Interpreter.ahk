@@ -451,6 +451,7 @@ class Piet
 			
 			i := 0
 			this.Grid[x, y] := ++i ; Not sure why I use i for these values instead of true
+			this.ReverseGrid[y, x] := i
 			
 			while Pos := Flood.Remove()
 			{
@@ -460,46 +461,65 @@ class Piet
 				{
 					nx := x+Dir[1], ny := y+Dir[2]
 					if (Grid[nx, ny] == this.Color && !this.Grid[nx, ny])
-						Flood.Insert([nx, ny]), this.Grid[nx, ny] := ++i
+					{
+						Flood.Insert([nx, ny])
+						this.Grid[nx, ny] := ++i
+						this.ReverseGrid[nx, ny]  := i
+					}
 				}
 			}
 			
 			this.Count := i
-		}
-		
-		GetCorner(DP, CC)
-		{ ; TODO
-			if DP == 1 ; Up
-			{
-				
-			}
-		}
-		
-		GetHCorner(Left, Top)
-		{ ; TO SCRAP
-			for x in this.Grid
-				if Left ; If leftmost, break immediately
-					break
-			for y in Codel[x]
-				if Top ; If topmost, break immediately (top is lower on Y axis)
-					break
-			return [x, y]
-		}
-		
-		GetVCorner(Codel, Top, Left)
-		{ ; TO SCRAP
-			Codel := Codel.Clone()
-			Codel.Remove("Color")
-			Codel.Remove("Count")
-			Codel := ReverseGrid(Codel)
 			
-			for y in Codel
-				if Top
-					break
-			for x in Codel[y]
-				if Left
-					break
-			return [x, y]
+			this.Corners := [] ; Point := this.Corners[DP, CC]
+			
+			; These two methods work on two principles
+			; A) For loops don't delete their iterator once exiting the loop
+			; B) Arrays are always looped through numerically lowest to highest
+			this.CalculateHCorners()
+			this.CalculateVCorners()
+		}
+		
+		CalculateHCorners()
+		{
+			Flag := True
+			for x in this.Grid
+			{
+				if Flag
+				{
+					for y in this.Grid[x]
+						if Flag
+							Flag := False, this.Corners[3, 1] := [x, y] ; Left Top (DP 3 CC 1)
+					this.Corners[3, 0] := [x, y] ; Left Bottom (DP 3 CC 0)
+				}
+			}
+			
+			Flag := True
+			for y in this.Grid[x]
+				if Flag
+					Flag := False, this.Corners[1, 0] := [x, y] ; Right Top (DP 1 CC 0)
+			this.Corners[1, 1] := [x, y] ; Right Bottom (DP 1 CC 1)
+		}
+		
+		CalculateVCorners()
+		{
+			Flag := True
+			for y in this.ReverseGrid
+			{
+				if Flag
+				{
+					for x in this.ReverseGrid[y]
+						if Flag
+							Flag := False, this.Corners[0, 0] := [x, y] ; Top left (DP 0 CC 0)
+					this.Corners[0, 1] := [x, y] ; Top Right (DP 0 CC 1)
+				}
+			}
+			
+			Flag := True
+			for x in this.ReverseGrid[y]
+				if Flag
+					Flag := False, this.Corners[2, 1] ; Bottom Left (DP 2 CC 1)
+			this.Corners[2, 0] := [x, y] ; Bottom Right (DP 2 CC 0)
 		}
 	}
 }
