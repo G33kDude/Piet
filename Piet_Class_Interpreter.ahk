@@ -8,14 +8,11 @@ If !pToken := Gdip_Startup()
 }
 OnExit, ExitSub
 
-; Colors are organized in a vertical column
-;   L  M  D 
-; R 11 21 31
-; Y 12 22 32
-; G 13 23 33
-; C 14 24 34
-; B 15 25 35
-; M 16 26 36
+; Colors (and operations) are organized in a horizontal grid
+;    R   Y   G   C   B   M 
+; L|1,1|2,1|3,1|4,1|5,1|6,1
+; M|1,2|2,2|3,2|4,2|5,2|6,2
+; D|1,3|2,3|3,3|4,3|5,3|6,3
 
 CodelSize := 1
 if %1%
@@ -24,80 +21,8 @@ else
 	FileSelectFile, sFile
 
 MyPiet := new Piet(sFile, 1)
-
-Wait := 0
-Loop
-{
-	Codel := GetCodel(Pixel[1], Pixel[2], Grid)
-	;DrawCodel(Codel, Grid)
-	
-	Wait := 0
-	While Wait < 8
-	{
-		NextPixel := GetNextPixel(DP, CC, Codel)
-		
-		if (PointOutBounds(NextPixel, 1, 1, Width, Height)
-			|| Grid[NextPixel*] == "000000")
-			{
-				CC := !CC
-				NextPixel := GetNextPixel(DP, CC, Codel)
-				
-				if (PointOutBounds(NextPixel, 1, 1, Width, Height)
-					|| Grid[NextPixel*] == "000000")
-				{
-					DP := RotateDP(DP)
-					Wait++
-					Continue
-					}
-			}
-		
-		Break
-	}
-	
-	if (Wait == 8) ; stuck, end program
-		Break
-	
-	
-	
-	While (Grid[NextPixel*] == "FFFFFF")
-	{
-		TmpPixel := NextPixel.Clone()
-		
-		Wait := 0
-		Loop, 8
-		{
-			While Grid[TmpPixel*] == "FFFFFF"
-				TmpPixel := AddDPToPoint(TmpPixel, DP)
-			
-			if (PointOutBounds(TmpPixel, 1, 1, Width, Height)
-				|| Grid[TmpPixel*] == "000000")
-				{
-					TmpPixel := AddDPToPoint(TmpPixel, RotateDP(DP, 2))
-					
-					Wait++
-					CC := !CC
-					DP := RotateDP(DP)
-					Continue
-				}
-			
-			Break
-		}
-		
-		if Wait >= 7
-			Break, 2
-		
-		Pixel := NextPixel := TmpPixel
-		
-	}
-	
-	Op := GetOperation(Grid[Pixel*], Grid[NextPixel*])
-	
-	;MsgBox, Step
-	Pixel := NextPixel
-}
-
-MsgBox, Wait timed out
-MsgBox, % """" StdOut """"
+StdOut := MyPiet.Execute()
+MsgBox, % StdOut
 ExitApp
 return
 
@@ -105,79 +30,22 @@ ExitSub:
 Gdip_Shutdown(pToken)
 ExitApp
 
-DrawCodel(Codel, Grid)
-{
-	static GText
-	;return
-	if !GText
-	{
-		Gui, Codel:Font, s6, Courier New
-		Gui, Codel:Add, Text, w800 h600 vGText
-		Gui, Codel:Show
-		GText := True
-	}
-	Out := []
-	for x, Column in Grid
-	{
-		for y, Color in Column
-		{
-			if (Codel[x, y])
-				Out[y, x] := "+"
-			Else
-			{
-				if Color in FFC0C0,FF0000,C00000
-					Out[y, x] := "R"
-				else if Color in FFFFC0,FFFF00,C0C000
-					Out[y, x] := "Y"
-				else if Color in C0FFC0,00FF00,00C000
-					Out[y, x] := "G"
-				else if Color in C0FFFF,00FFFF,00C0C0
-					Out[y, x] := "C"
-				else if Color in C0C0FF,0000FF,0000C0
-					Out[y, x] := "B"
-				else if Color in FFC0FF,FF00FF,C000C0
-					Out[y, x] := "M"
-				Else if Color = FFFFFF
-					Out[y, x] := "O"
-				Else if Color = 000000
-					Out[y, x] := "."
-			}
-		}
-	}
-	for y, Row in Out
-	{
-		for x, char in Row
-		{
-			OutText .= Char
-		}
-		OutText .= "`n"
-	}
-	GuiControl, Codel:, GText, %OutText%
-}
-
-PointInBounds(Point, x1, y1, x2, y2)
-{
-	if (Point[1] < x1 || Point[1] > x2)
-		return false
-	if (Point[2] < y1 || Point[2] > y2)
-		return false
-	
-	return true
-}
-
 class Piet
 {
 	__New(FilePath, CodelSize)
 	{
 		this.ParseFile(FilePath, CodelSize)
+		MsgBox, Parsed
 		
 		this.Stack := []
 		this.Point := [1, 1] ; Top left
 		this.StdIn := "" ; Possible other name: Buffer
+		this.CurrentCodel := Object()
 		
 		this.CC := 0 ; [LEFT, Right]
 		this.DP := 1 ; [Up, RIGHT, Down, Left]
 		
+		; This table is horizontal
 		this.Operations := [[this.NOP, this.PUSH, this.POP]
 		,[this.ADD, this.SUB, this.MUL]
 		,[this.DIV, this.MOD, this.NOT]
@@ -185,12 +53,12 @@ class Piet
 		,[this.DUP, this.ROLL, this.INN]
 		,[this.INC, this.OUTN, this.OUTC]]
 		
-		return this.Execute()
+		;return this.Execute()
 	}
 	
 	ParseFile(FilePath, CodelSize)
 	{
-		pBitmap := Gdip_CreateBitmapFromFile(sFile)
+		pBitmap := Gdip_CreateBitmapFromFile(FilePath)
 		Gdip_GetDimensions(pBitmap, w, h)
 		this.Width := w // CodelSize
 		this.Height := h // CodelSize
@@ -216,11 +84,14 @@ class Piet
 		
 		Gdip_DisposeImage(pBitmap)
 		
+		this.CurrentCodel := new Piet.Codel(this.Point[1], this.Point[2], this.Grid)
+		
 		return [this.Width, this.Height]
 	}
 	
 	StdOut(String)
 	{
+		this.OutBuffer .= String
 		ConOut := FileOpen("CONOUT$", "w")
 		ConOut.Write(String), ConOut.__Handle
 		return ConOut
@@ -230,7 +101,9 @@ class Piet
 	{
 		this.StdOut("`n>>> ")
 		ConIn := FileOpen("CONIN$", "r")
-		this.StdIn .= ConIn.ReadLine()
+		Input := ConIn.ReadLine()
+		StringReplace, Input, Input, `r,, All
+		this.StdIn .= Input
 		this.StdOut("`n")
 		return ConIn
 	}
@@ -238,36 +111,90 @@ class Piet
 	Execute()
 	{
 		Try
-		{
 			Loop
 				this.Step()
-			MsgBox Stepped
-		}
-		Catch e
-			throw e
-		Finally
-			return
+		return this.OutBuffer
 	}
 	
 	Step()
-	{ ; TODO: Finish this
+	{ ; TODO: Debug this
 		
 		; I should precompute and cache all codels
-		Codel := new Piet.Codel(this.Point[1], this.Point[2], this.Grid)
-		
+		this.CurrentCodel := new Piet.Codel(this.Point[1], this.Point[2], this.Grid)
+		;Print(this.Point, "<")
 		; Find next blob outside codel. Could be cached perhaps?
+		this.ExitCodel()
+		;Print("Exited:", this.Point)
+		; Now we need to glide across white
+		if (this.Grid[this.Point*] == "FFFFFF")
+		{ ; If we glide over white, there will be no operation to perform
+			this.GlideOverWhite()
+		}
+		else ; If we've moved onto another color block instead, there will be an operation
+		{
+			; Get the operations, then execute it
+			Operation := this.GetOperation(this.CurrentCodel.Color, this.Grid[this.Point*])
+			this.ExecuteOperation(Operation)
+		}
+	}
+	
+	GlideOverWhite()
+	{ ; TODO: Finish implementing
+		; Will use Grid, DP, CC, and Point to find the next codel to start from
+		Wait := 0
+		while (this.Grid[this.Point*] == "FFFFFF")
+		{
+			; Keep going until we've hit a block
+			While (this.Grid[this.Point*] == "FFFFFF")
+				this.AddDPToPoint()
+			
+			; If we're in the clear, break!
+			if (this.PointInBounds(this.Point) && this.Grid[this.Point*] != "000000")
+				break
+			
+			; Go back a point
+			this.RotateDP(2)
+			this.AddDPToPoint()
+			this.RotateDP(2)
+			
+			; Toggle the CC and rotate the DP by 1
+			this.ToggleCC()
+			this.RotateDP()
+			Wait++
+			
+			if (Wait > 8)
+				throw "Program stuck in white"
+		}
+		
+		return this.Point
+	}
+	
+	AddDPToPoint()
+	{
+		static Map := [[0,-1], [1,0], [0,1], [-1,0]]
+		this.Point[1] += Map[this.DP+1, 1]
+		this.Point[2] += Map[this.DP+1, 2]
+		return this.Point
+	}
+	
+	ExitCodel()
+	{ ; Uses CurrentCodel, DP, and CC to see what point (if any) we should exit from
 		Wait := 0
 		Loop
 		{
-			NextPixel := Codel.Corners[this.DP, this.CC]
+			this.Point := this.CurrentCodel.Corners[this.DP, this.CC]
+			;Print(this.CurrentCodel.Corners)
+			;Print(this.CurrentCodel.Corners[this.DP, this.CC], this.DP, this.CC)
+			if (Wait > 8)
+				throw Exception("Program stuck in block " this.Point[1] "," this.Point[2] ";" this.DP ":" this.CC)
 			
-			if PointInBounds(NextPixel, 1, 1, Width, Height)
+			if this.PointInBounds(this.Point)
 			{
-				if (Grid[NextPixel*] == "000000")
+				if (this.Grid[this.Point*] == "000000")
 				{ ; This CC option is a wall, try the other one
 					this.ToggleCC()
-					NextPixel := Codel.Corners[this.DP, this.CC]
-					if (Grid[NextPixel*] == "000000")
+					this.Point := this.CurrentCodel.Corners[this.DP, this.CC]
+					if (this.Grid[this.Point*] == "000000")
 					{ ; Both CC options are walls
 						this.RotateDP()
 						Wait++
@@ -284,15 +211,9 @@ class Piet
 				Wait++
 			}
 			
-			if (Wait > 8)
-				throw Exception("Program stuck")
 		}
 		
-		; Now we need to glide across white
-		
-		; Get the operations, then execute it
-		Operation := this.GetOperation(Codel.Color, Grid[NextPixel*])
-		this.ExecuteOperation(Operation)
+		return this.Point
 	}
 	
 	ExecuteOperation(Operation)
@@ -300,32 +221,35 @@ class Piet
 		; Pull the operation from the table of operations
 		; then call the method by its function pointer
 		; making sure to pass the invisible parameter "this"
-		return this.Operations[Operation].(this)
+		return this.Operations[Operation*].(this)
 	}
 	
 	GetOperation(OldColor, NewColor)
 	{
-		static ColorToIndex := {"FFC0C0": [1, 1], "FF0000": [2, 1], "C00000": [3, 1]
-		,"FFFFC0": [1, 2], "FFFF00": [2, 2], "C0C000": [3, 2]
-		,"C0FFC0": [1, 3], "00FF00": [2, 3], "00C000": [3, 3]
-		,"C0FFFF": [1, 4], "00FFFF": [2, 4], "00C0C0": [3, 4]
-		,"C0C0FF": [1, 5], "0000FF": [2, 5], "0000C0": [3, 5]
-		,"FFC0FF": [1, 6], "FF00FF": [2, 6], "C000C0": [3, 6]}
+		; This table is horizontal
+		static ColorToIndex := {"FFC0C0": [1, 1], "FF0000": [1, 2], "C00000": [1, 3]
+		,"FFFFC0": [2, 1], "FFFF00": [2, 2], "C0C000": [2, 3]
+		,"C0FFC0": [3, 1], "00FF00": [3, 2], "00C000": [3, 3]
+		,"C0FFFF": [4, 1], "00FFFF": [4, 2], "00C0C0": [4, 3]
+		,"C0C0FF": [5, 1], "0000FF": [5, 2], "0000C0": [5, 3]
+		,"FFC0FF": [6, 1], "FF00FF": [6, 2], "C000C0": [6, 3]}
 		
-		OldPos := ColorToIndex[OldColor].Clone()
-		NewPos := ColorToIndex[NewColor].Clone()
+		OldPos := ColorToIndex[OldColor]
+		NewPos := ColorToIndex[NewColor].Clone() ; We modify this one, so we have to clone it
 		
 		if (NewPos[1] < OldPos[1])
-			NewPos[1] += 3
+			NewPos[1] += 6
 		if (NewPos[2] < OldPos[2])
-			NewPos[2] += 6
+			NewPos[2] += 3
 		
-		return [NewPos[1] - OldPos[1] + 1, NewPos[2] - OldPos[2] + 1)
+		return [NewPos[1]-OldPos[1]+1, NewPos[2]-OldPos[2]+1]
 	}
 	
-	ToggleCC()
+	ToggleCC(Times=1)
 	{
-		return this.CC := !this.CC
+		Loop, % Times
+			this.CC := !this.CC
+		return this.CC
 	}
 	
 	RotateDP(n=1)
@@ -338,6 +262,16 @@ class Piet
 		return this.DP
 	}
 	
+	PointInBounds(Point)
+	{
+		if (Point[1] < 1 || Point[1] > this.Width)
+			return false
+		if (Point[2] < 1 || Point[2] > this.Height)
+			return false
+		
+		return true
+	}
+	
 	;{ Operations
 	NOP()
 	{
@@ -345,7 +279,7 @@ class Piet
 	}
 	PUSH()
 	{
-		return this.Stack.Insert(this.Codel.Size)
+		return this.Stack.Insert(this.CurrentCodel.Count)
 	}
 	POP()
 	{
@@ -430,6 +364,7 @@ class Piet
 		if !RegExMatch(this.StdIn, "s)^\s*(\d+)\s*(.*)$", Match)
 			return
 		this.StdIn := Match2
+		MsgBox, % Match1 "," Match2
 		return this.Stack.Insert(Match1)
 	}
 	; ---
@@ -440,8 +375,8 @@ class Piet
 		
 		Char := Asc(SubStr(this.StdIn, 1, 1))
 		this.StdIn := SubStr(this.StdIn, 2)
-		
-		return this.StdIn
+		MsgBox, % Char
+		return this.Stack.Insert(Char)
 	}
 	OUTN()
 	{
@@ -479,7 +414,7 @@ class Piet
 					{
 						Flood.Insert([nx, ny])
 						this.Grid[nx, ny] := ++i
-						this.ReverseGrid[nx, ny]  := i
+						this.ReverseGrid[ny, nx]  := i
 					}
 				}
 			}
