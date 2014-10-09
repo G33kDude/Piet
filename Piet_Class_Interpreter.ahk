@@ -1,4 +1,9 @@
-﻿DllCall("AllocConsole")
+﻿#NoEnv
+SetBatchLines, -1
+
+#Include Lib\Gdip_All.ahk
+
+DllCall("AllocConsole")
 
 ;New File; Start gdi+
 If !pToken := Gdip_Startup()
@@ -364,7 +369,7 @@ class Piet
 		if !RegExMatch(this.StdIn, "s)^\s*(\d+)\s*(.*)$", Match)
 			return
 		this.StdIn := Match2
-		MsgBox, % Match1 "," Match2
+		
 		return this.Stack.Insert(Match1)
 	}
 	; ---
@@ -375,7 +380,7 @@ class Piet
 		
 		Char := Asc(SubStr(this.StdIn, 1, 1))
 		this.StdIn := SubStr(this.StdIn, 2)
-		MsgBox, % Char
+		
 		return this.Stack.Insert(Char)
 	}
 	OUTN()
