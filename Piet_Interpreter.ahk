@@ -1,4 +1,11 @@
-﻿; Start gdi+
+﻿#NoEnv
+SetBatchLines, -1
+
+#Include Lib\Gdip_All.ahk
+
+DllCall("AllocConsole")
+
+;New File; Start gdi+
 If !pToken := Gdip_Startup()
 {
 	MsgBox, 48, gdiplus error!, Gdiplus failed to start. Please ensure you have gdiplus on your system
@@ -6,479 +13,527 @@ If !pToken := Gdip_Startup()
 }
 OnExit, ExitSub
 
-IndexToColor := [["FFC0C0", "FF0000", "C00000"]
-, ["FFFFC0", "FFFF00", "C0C000"]
-, ["C0FFC0", "00FF00", "00C000"]
-, ["C0FFFF", "00FFFF", "00C0C0"]
-, ["C0C0FF", "0000FF", "0000C0"]
-, ["FFC0FF", "FF00FF", "C000C0"]]
+; Colors (and operations) are organized in a horizontal grid
+;    R   Y   G   C   B   M 
+; L|1,1|2,1|3,1|4,1|5,1|6,1
+; M|1,2|2,2|3,2|4,2|5,2|6,2
+; D|1,3|2,3|3,3|4,3|5,3|6,3
 
-ColorToIndex := []
-for x, Column in IndexToColor
-	for y, Color in Column
-		ColorToIndex[Color] := [x, y]
-
-CodelSize := 1
+;CodelSize := 1
 if %1%
 	sFile = %1%
 else
 	FileSelectFile, sFile
 
-;InputBox, StdIn,, StdIn
-
-pBitmap := Gdip_CreateBitmapFromFile(sFile)
-
-Gdip_GetDimensions(pBitmap, w, h)
-
-Width := w // CodelSize
-Height := h // CodelSize
-
-SetFormat, IntegerFast, H
-
-Grid := []
-
-Gdip_LockBits(pBitmap, 0, 0, w, h, Stride, Scan, BitmapData)
-
-Loop, % Width
-{
-	x := A_Index
-	Loop, % Height
-	{
-		y := A_Index
-		
-		ARGB := Gdip_GetLockBitPixel(Scan, (x-1) * CodelSize, (y-1) * CodelSize, Stride)
-		
-		Grid[x, y] := SubStr(ARGB, -5)
-	}
-}
-
-Gdip_UnlockBits(pBitmap, BitmapData)
-
-SetFormat, IntegerFast, D
-
-Gdip_DisposeImage(pBitmap)
-Gdip_Shutdown(pToken)
-
-Stack := []
-CC := 0 ; [LEFT, Right]
-DP := 1 ; [Up, RIGHT, Down, Left]
-
-Pixel := [1, 1]
-
-DllCall("AllocConsole")
-cStdOut := FileOpen("CONOUT$", "w")
-
-Wait := 0
-Loop
-{
-	Codel := GetCodel(Pixel[1], Pixel[2], Grid)
-	;DrawCodel(Codel, Grid)
-	
-	Wait := 0
-	While Wait < 8
-	{
-		NextPixel := GetNextPixel(DP, CC, Codel)
-		
-		if (PointOutBounds(NextPixel, 1, 1, Width, Height)
-			|| Grid[NextPixel*] == "000000")
-			{
-				CC := !CC
-				NextPixel := GetNextPixel(DP, CC, Codel)
-				
-				if (PointOutBounds(NextPixel, 1, 1, Width, Height)
-					|| Grid[NextPixel*] == "000000")
-				{
-					DP := RotateDP(DP)
-					Wait++
-					Continue
-					}
-			}
-		
-		Break
-	}
-	
-	if (Wait == 8) ; stuck, end program
-		Break
-	
-	
-	
-	While (Grid[NextPixel*] == "FFFFFF")
-	{
-		TmpPixel := NextPixel.Clone()
-		
-		Wait := 0
-		Loop, 8
-		{
-			While Grid[TmpPixel*] == "FFFFFF"
-				TmpPixel := AddDPToPoint(TmpPixel, DP)
-			
-			if (PointOutBounds(TmpPixel, 1, 1, Width, Height)
-				|| Grid[TmpPixel*] == "000000")
-				{
-					TmpPixel := AddDPToPoint(TmpPixel, RotateDP(DP, 2))
-					
-					Wait++
-					CC := !CC
-					DP := RotateDP(DP)
-					Continue
-				}
-			
-			Break
-		}
-		
-		if Wait >= 7
-			Break, 2
-		
-		Pixel := NextPixel := TmpPixel
-		
-	}
-	
-	Op := GetOperation(Grid[Pixel*], Grid[NextPixel*])
-	
-	if (Op == "0,0")
-	{
-	}
-	else if (Op == "0,1")
-	{
-		Stack.Insert(Codel.Count)
-	}
-	else if (Op == "0,2" && Stack.MaxIndex() >= 1)
-	{
-		Stack.Remove()
-	}
-	else if (Op == "1,0" && Stack.MaxIndex() >= 2)
-	{
-		first := Stack.Remove()
-		second := Stack.Remove()
-		Stack.Insert(second + first)
-	}
-	else if (Op == "1,1" && Stack.MaxIndex() >= 2)
-	{
-		subtrahend := Stack.Remove()
-		minuend := Stack.Remove()
-		Stack.Insert(minuend - subtrahend)
-	}
-	else if (Op == "1,2" && Stack.MaxIndex() >= 2)
-	{
-		first := Stack.Remove()
-		second := Stack.Remove()
-		Stack.Insert(second * first)
-	}
-	else if (Op == "2,0" && Stack.MaxIndex() >= 2)
-	{
-		Divisor := Stack.Remove()
-		Dividend := Stack.Remove()
-		Stack.Insert(Dividend // Divisor) ; Floor division
-	}
-	else if (Op == "2,1" && Stack.MaxIndex() >= 2)
-	{
-		Divisor := Stack.Remove()
-		Dividend := Stack.Remove()
-		Stack.Insert(Mod(Dividend, Divisor)) ; Floor division
-	}
-	else if (Op == "2,2" && Stack.MaxIndex() >= 1)
-	{
-		Stack.Insert(!Stack.Remove())
-	}
-	else if (Op == "3,0" && Stack.MaxIndex() >= 2)
-	{
-		First := Stack.Remove()
-		Second := Stack.Remove()
-		Stack.Insert(Second > First)
-	}
-	else if (Op == "3,1" && Stack.MaxIndex() >= 1)
-	{
-		DP := RotateDP(DP, Stack.Remove())
-	}
-	else if (Op == "3,2" && Stack.MaxIndex() >= 1)
-	{
-		Loop, % Abs(Stack.Remove())
-			CC := !CC
-	}
-	else if (Op == "4,0" && Stack.MaxIndex() >= 1)
-	{
-		Stack.Insert(Stack[Stack.MaxIndex()])
-	}
-	else if (Op == "4,1" && Stack.MaxIndex() >= 2)
-	{
-		Roll := []
-		Rolls := Stack.Remove()
-		Depth := Stack.Remove()
-		
-		
-		Max := Stack.MaxIndex()
-		if (Rolls != 0 && Depth > 0 && Depth <= Max)
-		{
-			DepthPos := Max - Depth + 1
-			if (Rolls > 0)
-				Loop, % Rolls
-					Stack.Insert(DepthPos, Stack.Remove())
-			else
-				Loop, % Abs(Rolls)
-					Stack.Insert(Stack.Remove(DepthPos))
-		}
-		
-	}
-	else if (Op == "4,2")
-	{
-		if !StdIn
-			MsgBox, outta stdin
-		
-		if (RegExMatch(StdIn, "^\-?\d+", Match))
-		{
-			StdIn := SubStr(StdIn, StrLen(Match)+1)
-			Stack.Insert(Match)
-		}
-	}
-	else if (Op == "5,0")
-	{
-		if !StdIn
-		{
-			cStdOut.Write("`n>>> "), cStdOut.__Handle
-			
-			cStdIn := FileOpen("CONIN$", "r")
-			StdIn .= cStdIn.ReadLine()
-			
-			cStdOut.Write("`n"), cStdOut.__Handle
-		}
-		
-		Stack.Insert(Asc(SubStr(StdIn, 1, 1)))
-		StdIn := SubStr(StdIn, 2)
-	}
-	else if (Op == "5,1" && Stack.MaxIndex() >= 1)
-	{
-		Num := Stack.Remove()
-		StdOut .= " " Num " "
-		cStdOut.Write(" " Num " "), cStdOut.__Handle
-	}
-	else if (Op == "5,2" && Stack.MaxIndex() >= 1)
-	{
-		Num := Stack.Remove()
-		Chr := Chr(Num)
-		
-		StdOut .= Chr
-		cStdOut.Write(Chr), cStdOut.__Handle
-	}
-	Else
-	{
-		MsgBox, % Op
-	}
-	
-	;MsgBox, Step
-	Pixel := NextPixel
-}
-
-MsgBox, Wait timed out
-MsgBox, % """" StdOut """"
+MyPiet := new Piet(sFile, 1)
+StdOut := MyPiet.Execute()
+MsgBox, % StdOut
 ExitApp
 return
 
 ExitSub:
+Gdip_Shutdown(pToken)
 ExitApp
 
-GetOperation(OldColor, NewColor)
+class Piet
 {
-	global IndexToColor, ColorToIndex
-	
-	OldPos := ColorToIndex[OldColor].Clone()
-	NewPos := ColorToIndex[NewColor].Clone()
-	
-	
-	if (NewPos[1] < OldPos[1])
-		NewPos[1] += 6
-	if (NewPos[2] < OldPos[2])
-		NewPos[2] += 3
-	
-	
-	
-	Diff := NewPos[1] - OldPos[1]
-	. "," NewPos[2] - OldPos[2]
-	
-	return Diff
-}
-
-GetNextPixel(DP, CC, Codel)
-{
-	if (DP == 0) ; Up
+	__New(FilePath, CodelSize=0)
 	{
-		if CC ; Right
-			Pixel := GetVCorner(Codel, True, False) ; Top Right
-		else ; Left
-			Pixel := GetVCorner(Codel, True, True) ; Top Left
-	}
-	if (DP == 1) ; Right
-	{
-		if CC ; Right
-			Pixel := GetHCorner(Codel, False, False) ; Right Bottom
-		else ; Left
-			Pixel := GetHCorner(Codel, False, True) ; Right Top
-	}
-	else if (DP == 2) ; Down
-	{
-		if CC ; Right 
-			Pixel := GetVCorner(Codel, False, True) ; Bottom Left
-		else ; Left
-			Pixel := GetVCorner(Codel, False, False) ; Bottom Right
-	}
-	else if (DP == 3) ; Left
-	{
-		if CC ; Right
-			Pixel := GetHCorner(Codel, True, True) ; Left Top
-		else ; Left
-			Pixel := GetHCorner(Codel, True, False) ; Left Bottom
+		this.Stack := []
+		this.Point := [1, 1] ; Top left
+		this.StdIn := "" ; Possible other name: Buffer
+		this.CodelSize := CodelSize
+		this.CurrentCodel := Object()
+		
+		this.CC := 0 ; [LEFT, Right]
+		this.DP := 1 ; [Up, RIGHT, Down, Left]
+		
+		; This table is horizontal
+		this.Operations := [[this.NOP, this.PUSH, this.POP]
+		,[this.ADD, this.SUB, this.MUL]
+		,[this.DIV, this.MOD, this.NOT]
+		,[this.GRTR, this.PTR, this.SWCH]
+		,[this.DUP, this.ROLL, this.INN]
+		,[this.INC, this.OUTN, this.OUTC]]
+		
+		this.StdOut("Loading`n")
+		this.ParseFile(FilePath)
+		this.StdOut("Loaded`n`n")
+		
+		return this
 	}
 	
-	return AddDPToPoint(Pixel, DP)
-}
-
-AddDPToPoint(Point, DP)
-{
-	Point := Point.Clone()
-	if (DP == 0)
-		Point[2] -= 1
-	if (DP == 1)
-		Point[1] += 1
-	if (DP == 2)
-		Point[2] += 1
-	if (DP == 3)
-		Point[1] -= 1
-	return Point
-}
-
-RotateDP(DP, n=1)
-{
-	DP += n
-	While DP > 3
-		DP -= 4
-	While DP < 0
-		DP += 4
-	return DP
-}
-
-DrawCodel(Codel, Grid)
-{
-	static GText
-	;return
-	if !GText
+	ParseFile(FilePath)
 	{
-		Gui, Codel:Font, s6, Courier New
-		Gui, Codel:Add, Text, w800 h600 vGText
-		Gui, Codel:Show
-		GText := True
-	}
-	Out := []
-	for x, Column in Grid
-	{
-		for y, Color in Column
+		this.Grid := []
+		
+		pBitmap := Gdip_CreateBitmapFromFile(FilePath)
+		Gdip_GetDimensions(pBitmap, w, h)
+		Gdip_LockBits(pBitmap, 0, 0, w, h, Stride, Scan, BitmapData)
+		
+		if !this.CodelSize
 		{
-			if (Codel[x, y])
-				Out[y, x] := "♥"
-			Else
+			a := this.GetCodelSize(0, w, h, Scan, Stride)
+			b := this.GetCodelSize(1, w, h, Scan, Stride)
+			this.CodelSize := a < b ? a : b
+		}
+		
+		this.Width := w // this.CodelSize
+		this.Height := h // this.CodelSize
+		
+		SetFormat, IntegerFast, H ; Hex
+		Loop, % this.Width
+		{
+			x := A_Index
+			Loop, % this.Height
 			{
-				if Color in FFC0C0,FF0000,C00000
-					Out[y, x] := "R"
-				else if Color in FFFFC0,FFFF00,C0C000
-					Out[y, x] := "Y"
-				else if Color in C0FFC0,00FF00,00C000
-					Out[y, x] := "G"
-				else if Color in C0FFFF,00FFFF,00C0C0
-					Out[y, x] := "C"
-				else if Color in C0C0FF,0000FF,0000C0
-					Out[y, x] := "B"
-				else if Color in FFC0FF,FF00FF,C000C0
-					Out[y, x] := "M"
-				Else if Color = FFFFFF
-					Out[y, x] := "O"
-				Else if Color = 000000
-					Out[y, x] := "."
+				y := A_Index
+				ARGB := Gdip_GetLockBitPixel(Scan, (x-1) * this.CodelSize, (y-1) * this.CodelSize, Stride)
+				this.Grid[x, y] := SubStr(ARGB, -5) ; Last 6 characters of the 0xARGB string (the RGB)
 			}
 		}
-	}
-	for y, Row in Out
-	{
-		for x, char in Row
-		{
-			OutText .= Char
-		}
-		OutText .= "`n"
-	}
-	GuiControl, Codel:, GText, %OutText%
-}
-
-GetCodel(x, y, Grid)
-{
-	Color := Grid[x, y]
-	Stack := [[x, y]]
-	Out := {"Color": Color}
-	
-	i := 0
-	Out[x, y] := ++i
-	
-	while (Pos := Stack.Remove(1))
-	{
-		x := Pos[1], y := Pos[2]
+		SetFormat, IntegerFast, D ; Dec
 		
-		if (Grid[x+1, y] == Color && !Out[x+1, y])
-			Stack.Insert([x+1, y]), Out[x+1, y] := ++i
-		if (Grid[x-1, y] == Color && !Out[x-1, y])
-			Stack.Insert([x-1, y]), Out[x-1, y] := ++i
-		if (Grid[x, y+1] == Color && !Out[x, y+1])
-			Stack.Insert([x, y+1]), Out[x, y+1] := ++i
-		if (Grid[x, y-1] == Color && !Out[x, y-1])
-			Stack.Insert([x, y-1]), Out[x, y-1] := ++i
+		Gdip_UnlockBits(pBitmap, BitmapData)
+		Gdip_DisposeImage(pBitmap)
+		
+		this.CurrentCodel := new Piet.Codel(this.Point[1], this.Point[2], this.Grid)
+		
+		return [this.Width, this.Height]
 	}
 	
-	Out["Count"] := i
-	return Out
-}
-
-GetHCorner(Codel, Left, Top)
-{
-	Codel := Codel.Clone()
-	Codel.Remove("Color")
-	Codel.Remove("Count")
-	for x in Codel
-		if Left ; If leftmost, break immediately
-			break
-	for y in Codel[x]
-		if Top ; If topmost, break immediately (top is lower on Y axis)
-			break
-	return [x, y]
-}
-
-GetVCorner(Codel, Top, Left)
-{
-	Codel := Codel.Clone()
-	Codel.Remove("Color")
-	Codel.Remove("Count")
-	Codel := ReverseGrid(Codel)
+	GetCodelSize(i, w, h, Scan, Stride)
+	{ ; TODO: Make it do both directions in one call, and get the GCF of all sizes
+		; "i" is whether to look vertically or horizontally
+		
+		CodelSize := w ; I assume codel size can't be larger than the width
+		
+		; We start with the largest possible codel size so we won't accidentally set codel size to 0
+		Count := CodelSize
+		
+		Loop, % i ? h : w
+		{
+			i ? (y := A_Index - 1) : (x := A_Index - 1)
+			
+			; We want to start a new block the first time we loop
+			; So we set the current block color to -1, which isn't
+			; a valid color, and will be immediately replaced as it
+			; sees we've entered a block of color that isn't -1
+			CurrentBlockColor := -1
+			
+			Loop, % i ? w : h
+			{
+				i ? (x := A_Index - 1) : (y := A_Index - 1)
+				
+				ARGB := Gdip_GetLockBitPixel(Scan, x, y, Stride)
+				
+				if (ARGB == CurrentBlockColor) ; If we are more of the last block, just add one to the size
+					Count++
+				else
+				{
+					; If the size of the previous block was smaller than the current smallest
+					; And (when set set the smallest to the last block) if the smallest size is 1, we can't go smaller so return.
+					if (Count < CodelSize && (CodelSize := Count) == 1) ; Short circuit trick
+						return 1
+					
+					; We've entered a new block now, so we want to
+					; set the current block color and reset the block size to 1
+					CurrentBlockColor := ARGB
+					Count := 1
+				}
+			}
+			
+			; Since we've exited the grid, we can close the block from the end of the grid.
+			if (Count < CodelSize && (CodelSize := Count) == 1) ; Short circuit trick
+				return 1
+		}
+		
+		return CodelSize
+	}
 	
-	for y in Codel
-		if Top
-			break
-	for x in Codel[y]
-		if Left
-			break
-	return [x, y]
-}
-
-ReverseGrid(Grid)
-{
-	Out := []
-	for x, Column in Grid
-		for y, Value in Column
-			Out[y, x] := Value
-	return Out
-}
-
-PointOutBounds(Point, x1, y1, x2, y2)
-{
-	if (Point[1] < x1 || Point[1] > x2)
-		return true
-	if (Point[2] < y1 || Point[2] > y2)
-		return true
+	StdOut(String)
+	{
+		this.OutBuffer .= String
+		ConOut := FileOpen("CONOUT$", "w")
+		ConOut.Write(String), ConOut.__Handle
+		return ConOut
+	}
 	
-	return false
+	GetStdIn()
+	{
+		this.StdOut("`n>>> ")
+		ConIn := FileOpen("CONIN$", "r")
+		Input := ConIn.ReadLine()
+		StringReplace, Input, Input, `r,, All
+		this.StdIn .= Input
+		this.StdOut("`n")
+		return ConIn
+	}
+	
+	Execute()
+	{
+		Try
+			Loop
+				this.Step()
+		return this.OutBuffer
+	}
+	
+	Step()
+	{
+		
+		; I should precompute and cache all codels
+		this.CurrentCodel := new Piet.Codel(this.Point[1], this.Point[2], this.Grid)
+		;Print(this.Point, "<")
+		; Find next blob outside codel. Could be cached perhaps?
+		this.ExitCodel()
+		;Print("Exited:", this.Point)
+		; Now we need to glide across white
+		if (this.Grid[this.Point*] == "FFFFFF")
+		{ ; If we glide over white, there will be no operation to perform
+			this.GlideOverWhite()
+		}
+		else ; If we've moved onto another color block instead, there will be an operation
+		{
+			; Get the operations, then execute it
+			Operation := this.GetOperation(this.CurrentCodel.Color, this.Grid[this.Point*])
+			this.ExecuteOperation(Operation)
+		}
+	}
+	
+	GlideOverWhite()
+	{
+		; Will use Grid, DP, CC, and Point to find the next codel to start from
+		Wait := 0
+		while (this.Grid[this.Point*] == "FFFFFF")
+		{
+			; Keep going until we've hit a block
+			While (this.Grid[this.Point*] == "FFFFFF")
+				this.AddDPToPoint()
+			
+			; If we're in the clear, break!
+			if (this.PointInBounds(this.Point) && this.Grid[this.Point*] != "000000")
+				break
+			
+			; Go back a point
+			this.RotateDP(2)
+			this.AddDPToPoint()
+			this.RotateDP(2)
+			
+			; Toggle the CC and rotate the DP by 1
+			this.ToggleCC()
+			this.RotateDP()
+			Wait++
+			
+			if (Wait > 8)
+				throw "Program stuck in white"
+		}
+		
+		return this.Point
+	}
+	
+	AddDPToPoint()
+	{
+		static Map := [[0,-1], [1,0], [0,1], [-1,0]]
+		this.Point[1] += Map[this.DP+1, 1]
+		this.Point[2] += Map[this.DP+1, 2]
+		return this.Point
+	}
+	
+	ExitCodel()
+	{ ; Uses CurrentCodel, DP, and CC to see what point (if any) we should exit from
+		Wait := 0
+		Loop
+		{
+			this.Point := this.CurrentCodel.Corners[this.DP, this.CC]
+			;Print(this.CurrentCodel.Corners)
+			;Print(this.CurrentCodel.Corners[this.DP, this.CC], this.DP, this.CC)
+			if (Wait > 8)
+				throw Exception("Program stuck in block " this.Point[1] "," this.Point[2] ";" this.DP ":" this.CC)
+			
+			if this.PointInBounds(this.Point)
+			{
+				if (this.Grid[this.Point*] == "000000")
+				{ ; This CC option is a wall, try the other one
+					this.ToggleCC()
+					this.Point := this.CurrentCodel.Corners[this.DP, this.CC]
+					if (this.Grid[this.Point*] == "000000")
+					{ ; Both CC options are walls
+						this.RotateDP()
+						Wait++
+					}
+					else ; Success, not a wall
+						Break
+				}
+				else ; Success, not a wall
+					Break
+			}
+			else
+			{ ; This direction is out of bounds
+				this.RotateDP()
+				Wait++
+			}
+			
+		}
+		
+		return this.Point
+	}
+	
+	ExecuteOperation(Operation)
+	{
+		; Pull the operation from the table of operations
+		; then call the method by its function pointer
+		; making sure to pass the invisible parameter "this"
+		return this.Operations[Operation*].(this)
+	}
+	
+	GetOperation(OldColor, NewColor)
+	{
+		; This table is horizontal
+		static ColorToIndex := {"FFC0C0": [1, 1], "FF0000": [1, 2], "C00000": [1, 3]
+		,"FFFFC0": [2, 1], "FFFF00": [2, 2], "C0C000": [2, 3]
+		,"C0FFC0": [3, 1], "00FF00": [3, 2], "00C000": [3, 3]
+		,"C0FFFF": [4, 1], "00FFFF": [4, 2], "00C0C0": [4, 3]
+		,"C0C0FF": [5, 1], "0000FF": [5, 2], "0000C0": [5, 3]
+		,"FFC0FF": [6, 1], "FF00FF": [6, 2], "C000C0": [6, 3]}
+		
+		OldPos := ColorToIndex[OldColor]
+		NewPos := ColorToIndex[NewColor].Clone() ; We modify this one, so we have to clone it
+		
+		if (NewPos[1] < OldPos[1])
+			NewPos[1] += 6
+		if (NewPos[2] < OldPos[2])
+			NewPos[2] += 3
+		
+		return [NewPos[1]-OldPos[1]+1, NewPos[2]-OldPos[2]+1]
+	}
+	
+	ToggleCC(Times=1)
+	{
+		Loop, % Times
+			this.CC := !this.CC
+		return this.CC
+	}
+	
+	RotateDP(n=1)
+	{ ; TODO: Elegant this
+		this.DP += n
+		While this.DP > 3
+			this.DP -= 4
+		While this.DP < 0
+			this.DP += 4
+		return this.DP
+	}
+	
+	PointInBounds(Point)
+	{
+		if (Point[1] < 1 || Point[1] > this.Width)
+			return false
+		if (Point[2] < 1 || Point[2] > this.Height)
+			return false
+		
+		return true
+	}
+	
+	;{ Operations
+	NOP()
+	{
+		return
+	}
+	PUSH()
+	{
+		return this.Stack.Insert(this.CurrentCodel.Count)
+	}
+	POP()
+	{
+		return this.Stack.Remove()
+	}
+	; ---
+	ADD()
+	{
+		return this.Stack.Insert(this.Stack.Remove() + this.Stack.Remove())
+	}
+	SUB()
+	{
+		Subtrahend := this.Stack.Remove()
+		Minuend := this.Stack.Remove()
+		return this.Stack.Insert(Minuend - Subtrahend)
+	}
+	MUL()
+	{
+		return this.Stack.Insert(this.Stack.Remove() * this.Stack.Remove())
+	}
+	; ---
+	DIV()
+	{
+		Divisor := this.Stack.Remove()
+		Dividend := this.Stack.Remove()
+		return this.Stack.Insert(Dividend // Divisor)
+	}
+	MOD()
+	{
+		Divisor := this.Stack.Remove()
+		Dividend := this.Stack.Remove()
+		return this.Stack.Insert(Mod(Dividend, Divisor))
+	}
+	NOT()
+	{
+		return this.Stack.Insert(!this.Stack.Remove())
+	}
+	; ---
+	GRTR()
+	{
+		First := this.Stack.Remove()
+		Second := this.Stack.Remove()
+		return this.Stack.Insert(Second > First)
+	}
+	PTR()
+	{
+		this.RotateDP(this.Stack.Remove())
+	}
+	SWCH()
+	{
+		this.ToggleCC(this.Stack.Remove())
+	}
+	; ---
+	DUP()
+	{
+		this.Stack.Insert(this.Stack[this.Stack.MaxIndex()])
+	}
+	ROLL()
+	{
+		Rolls := this.Stack.Remove()
+		Depth := this.Stack.Remove()
+		
+		if !Rolls ; Don't roll
+			return
+		
+		if Depth < 2 ; 1 depth does nothing, 0 depth is nothing, negative depth is invalid
+			return
+		
+		DepthPos := this.Stack.MaxIndex() - Depth + 1
+		if (Rolls > 0)
+			Loop, % Rolls
+				this.Stack.Insert(DepthPos, this.Stack.Remove()) ; Take out an item at top and put it at depth
+		else
+			Loop, % Abs(Rolls)
+				this.Stack.Insert(this.Stack.Remove(DepthPos)) ; Take out an item at depth and put it on top
+	}
+	INN()
+	{
+		if !this.StdIn
+			this.GetStdIn()
+		
+		if !RegExMatch(this.StdIn, "s)^\s*(\d+)\s*(.*)$", Match)
+			return
+		this.StdIn := Match2
+		
+		return this.Stack.Insert(Match1)
+	}
+	; ---
+	INC()
+	{
+		if !this.StdIn
+			this.GetStdIn()
+		
+		Char := Asc(SubStr(this.StdIn, 1, 1))
+		this.StdIn := SubStr(this.StdIn, 2)
+		
+		return this.Stack.Insert(Char)
+	}
+	OUTN()
+	{
+		Num := this.Stack.Remove()
+		this.StdOut(" " Num " ")
+		return Num
+	}
+	OUTC()
+	{
+		Char := Chr(this.Stack.Remove())
+		this.StdOut(Char)
+		return Char
+	}
+	;}
+	
+	class Codel
+	{
+		__New(x, y, Grid)
+		{
+			this.Color := Grid[x, y]
+			Flood := [[x, y]]
+			
+			i := 0
+			this.Grid[x, y] := ++i ; Not sure why I use i for these values instead of true
+			this.ReverseGrid[y, x] := i
+			
+			while Pos := Flood.Remove()
+			{
+				x := Pos[1], y := Pos[2]
+				
+				for each, Dir in [[1, 0], [-1, 0], [0, 1], [0, -1]]
+				{
+					nx := x+Dir[1], ny := y+Dir[2]
+					if (Grid[nx, ny] == this.Color && !this.Grid[nx, ny])
+					{
+						Flood.Insert([nx, ny])
+						this.Grid[nx, ny] := ++i
+						this.ReverseGrid[ny, nx]  := i
+					}
+				}
+			}
+			
+			this.Count := i
+			
+			this.Corners := [] ; Point := this.Corners[DP, CC]
+			
+			; These two methods work on two principles
+			; A) For loops don't delete their iterator once exiting the loop
+			; B) Arrays are always looped through numerically lowest to highest
+			this.CalculateHCorners()
+			this.CalculateVCorners()
+		}
+		
+		CalculateHCorners()
+		{
+			Flag := True
+			for x in this.Grid
+			{
+				if Flag
+				{
+					for y in this.Grid[x]
+						if Flag
+							Flag := False, this.Corners[3, 1] := [x-1, y] ; Left Top (DP 3 CC 1)
+					this.Corners[3, 0] := [x-1, y] ; Left Bottom (DP 3 CC 0)
+				}
+			}
+			
+			Flag := True
+			for y in this.Grid[x]
+				if Flag
+					Flag := False, this.Corners[1, 0] := [x+1, y] ; Right Top (DP 1 CC 0)
+			this.Corners[1, 1] := [x+1, y] ; Right Bottom (DP 1 CC 1)
+		}
+		
+		CalculateVCorners()
+		{
+			Flag := True
+			for y in this.ReverseGrid
+			{
+				if Flag
+				{
+					for x in this.ReverseGrid[y]
+						if Flag
+							Flag := False, this.Corners[0, 0] := [x, y-1] ; Top left (DP 0 CC 0)
+					this.Corners[0, 1] := [x, y-1] ; Top Right (DP 0 CC 1)
+				}
+			}
+			
+			Flag := True
+			for x in this.ReverseGrid[y]
+				if Flag
+					Flag := False, this.Corners[2, 1] := [x, y+1] ; Bottom Left (DP 2 CC 1)
+			this.Corners[2, 0] := [x, y+1] ; Bottom Right (DP 2 CC 0)
+		}
+	}
 }
 
 Escape::ExitApp
