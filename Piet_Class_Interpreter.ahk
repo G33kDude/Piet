@@ -19,7 +19,7 @@ OnExit, ExitSub
 ; M|1,2|2,2|3,2|4,2|5,2|6,2
 ; D|1,3|2,3|3,3|4,3|5,3|6,3
 
-CodelSize := 1
+;CodelSize := 1
 if %1%
 	sFile = %1%
 else
@@ -37,14 +37,12 @@ ExitApp
 
 class Piet
 {
-	__New(FilePath, CodelSize)
+	__New(FilePath, CodelSize=0)
 	{
-		this.ParseFile(FilePath, CodelSize)
-		MsgBox, Parsed
-		
 		this.Stack := []
 		this.Point := [1, 1] ; Top left
 		this.StdIn := "" ; Possible other name: Buffer
+		this.CodelSize := CodelSize
 		this.CurrentCodel := Object()
 		
 		this.CC := 0 ; [LEFT, Right]
@@ -58,40 +56,99 @@ class Piet
 		,[this.DUP, this.ROLL, this.INN]
 		,[this.INC, this.OUTN, this.OUTC]]
 		
-		;return this.Execute()
+		this.StdOut("Loading`n")
+		this.ParseFile(FilePath)
+		this.StdOut("Loaded`n`n")
+		
+		return this
 	}
 	
-	ParseFile(FilePath, CodelSize)
+	ParseFile(FilePath)
 	{
-		pBitmap := Gdip_CreateBitmapFromFile(FilePath)
-		Gdip_GetDimensions(pBitmap, w, h)
-		this.Width := w // CodelSize
-		this.Height := h // CodelSize
-		
-		SetFormat, IntegerFast, H
-		
 		this.Grid := []
 		
+		pBitmap := Gdip_CreateBitmapFromFile(FilePath)
+		Gdip_GetDimensions(pBitmap, w, h)
 		Gdip_LockBits(pBitmap, 0, 0, w, h, Stride, Scan, BitmapData)
+		
+		if !this.CodelSize
+		{
+			a := this.GetCodelSize(0, w, h, Scan, Stride)
+			b := this.GetCodelSize(1, w, h, Scan, Stride)
+			this.CodelSize := a < b ? a : b
+		}
+		
+		this.Width := w // this.CodelSize
+		this.Height := h // this.CodelSize
+		
+		SetFormat, IntegerFast, H ; Hex
 		Loop, % this.Width
 		{
 			x := A_Index
 			Loop, % this.Height
 			{
 				y := A_Index
-				ARGB := Gdip_GetLockBitPixel(Scan, (x-1) * CodelSize, (y-1) * CodelSize, Stride)
+				ARGB := Gdip_GetLockBitPixel(Scan, (x-1) * this.CodelSize, (y-1) * this.CodelSize, Stride)
 				this.Grid[x, y] := SubStr(ARGB, -5) ; Last 6 characters of the 0xARGB string (the RGB)
 			}
 		}
+		SetFormat, IntegerFast, D ; Dec
+		
 		Gdip_UnlockBits(pBitmap, BitmapData)
-		
-		SetFormat, IntegerFast, D
-		
 		Gdip_DisposeImage(pBitmap)
 		
 		this.CurrentCodel := new Piet.Codel(this.Point[1], this.Point[2], this.Grid)
 		
 		return [this.Width, this.Height]
+	}
+	
+	GetCodelSize(i, w, h, Scan, Stride)
+	{ ; TODO: Make it do both directions in one call, and get the GCF of all sizes
+		; "i" is whether to look vertically or horizontally
+		
+		CodelSize := w ; I assume codel size can't be larger than the width
+		
+		; We start with the largest possible codel size so we won't accidentally set codel size to 0
+		Count := CodelSize
+		
+		Loop, % i ? h : w
+		{
+			i ? (y := A_Index - 1) : (x := A_Index - 1)
+			
+			; We want to start a new block the first time we loop
+			; So we set the current block color to -1, which isn't
+			; a valid color, and will be immediately replaced as it
+			; sees we've entered a block of color that isn't -1
+			CurrentBlockColor := -1
+			
+			Loop, % i ? w : h
+			{
+				i ? (x := A_Index - 1) : (y := A_Index - 1)
+				
+				ARGB := Gdip_GetLockBitPixel(Scan, x, y, Stride)
+				
+				if (ARGB == CurrentBlockColor) ; If we are more of the last block, just add one to the size
+					Count++
+				else
+				{
+					; If the size of the previous block was smaller than the current smallest
+					; And (when set set the smallest to the last block) if the smallest size is 1, we can't go smaller so return.
+					if (Count < CodelSize && (CodelSize := Count) == 1) ; Short circuit trick
+						return 1
+					
+					; We've entered a new block now, so we want to
+					; set the current block color and reset the block size to 1
+					CurrentBlockColor := ARGB
+					Count := 1
+				}
+			}
+			
+			; Since we've exited the grid, we can close the block from the end of the grid.
+			if (Count < CodelSize && (CodelSize := Count) == 1) ; Short circuit trick
+				return 1
+		}
+		
+		return CodelSize
 	}
 	
 	StdOut(String)
@@ -122,7 +179,7 @@ class Piet
 	}
 	
 	Step()
-	{ ; TODO: Debug this
+	{
 		
 		; I should precompute and cache all codels
 		this.CurrentCodel := new Piet.Codel(this.Point[1], this.Point[2], this.Grid)
@@ -144,7 +201,7 @@ class Piet
 	}
 	
 	GlideOverWhite()
-	{ ; TODO: Finish implementing
+	{
 		; Will use Grid, DP, CC, and Point to find the next codel to start from
 		Wait := 0
 		while (this.Grid[this.Point*] == "FFFFFF")
