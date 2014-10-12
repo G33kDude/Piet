@@ -270,10 +270,10 @@ class Piet
 			}
 			else
 			{ ; This direction is out of bounds
+				this.ToggleCC()
 				this.RotateDP()
 				Wait++
 			}
-			
 		}
 		
 		return this.Point
