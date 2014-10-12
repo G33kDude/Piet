@@ -25,7 +25,7 @@ if %1%
 else
 	FileSelectFile, sFile
 
-MyPiet := new Piet(sFile, 1)
+MyPiet := new Piet(sFile)
 StdOut := MyPiet.Execute()
 MsgBox, % StdOut
 ExitApp
@@ -58,6 +58,7 @@ class Piet
 		
 		this.StdOut("Loading`n")
 		this.ParseFile(FilePath)
+		this.StdOut("Codel size: " this.CodelSize "`n")
 		this.StdOut("Loaded`n`n")
 		
 		return this
