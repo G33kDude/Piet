@@ -43,7 +43,9 @@ class Piet
 		this.Point := [1, 1] ; Top left
 		this.StdIn := "" ; Possible other name: Buffer
 		this.CodelSize := CodelSize
+		this.Codels := []
 		this.CurrentCodel := Object()
+		
 		
 		this.CC := 0 ; [LEFT, Right]
 		this.DP := 1 ; [Up, RIGHT, Down, Left]
@@ -99,6 +101,7 @@ class Piet
 		Gdip_DisposeImage(pBitmap)
 		
 		this.CurrentCodel := new Piet.Codel(this.Point[1], this.Point[2], this.Grid)
+		this.Codels[this.Point*] := this.CurrentCodel
 		
 		return [this.Width, this.Height]
 	}
@@ -183,7 +186,8 @@ class Piet
 	{
 		
 		; I should precompute and cache all codels
-		this.CurrentCodel := new Piet.Codel(this.Point[1], this.Point[2], this.Grid)
+		this.GetCurrentCodel()
+		
 		;Print(this.Point, "<")
 		; Find next blob outside codel. Could be cached perhaps?
 		this.ExitCodel()
@@ -199,6 +203,13 @@ class Piet
 			Operation := this.GetOperation(this.CurrentCodel.Color, this.Grid[this.Point*])
 			this.ExecuteOperation(Operation)
 		}
+	}
+	
+	GetCurrentCodel()
+	{
+		if !this.Codels[this.Point*]
+			this.Codels[this.Point*] := new Piet.Codel(this.Point[1], this.Point[2], this.Grid)
+		this.CurrentCodel := this.Codels[this.Point*]
 	}
 	
 	GlideOverWhite()
@@ -242,10 +253,22 @@ class Piet
 	
 	ExitCodel()
 	{ ; Uses CurrentCodel, DP, and CC to see what point (if any) we should exit from
+		if this.CurrentCodel.Exits[this.DP, this.CC]
+		{
+			Tmp := this.CurrentCodel.Exits[this.DP, this.CC]
+			this.Point := Tmp[1].Clone()
+			this.DP := Tmp[2]
+			this.CC := Tmp[3]
+			
+			return this.Point
+		}
+		
+		Tmp := [this.DP, this.CC]
+		
 		Wait := 0
 		Loop
 		{
-			this.Point := this.CurrentCodel.Corners[this.DP, this.CC]
+			this.Point := this.CurrentCodel.Corners[this.DP, this.CC].Clone()
 			;Print(this.CurrentCodel.Corners)
 			;Print(this.CurrentCodel.Corners[this.DP, this.CC], this.DP, this.CC)
 			if (Wait > 8)
@@ -256,7 +279,7 @@ class Piet
 				if (this.Grid[this.Point*] == "000000")
 				{ ; This CC option is a wall, try the other one
 					this.ToggleCC()
-					this.Point := this.CurrentCodel.Corners[this.DP, this.CC]
+					this.Point := this.CurrentCodel.Corners[this.DP, this.CC].Clone()
 					if (this.Grid[this.Point*] == "000000")
 					{ ; Both CC options are walls
 						this.RotateDP()
@@ -276,6 +299,7 @@ class Piet
 			}
 		}
 		
+		this.CurrentCodel.Exits[Tmp*] := [this.Point.Clone(), this.DP, this.CC]
 		return this.Point
 	}
 	
@@ -485,6 +509,7 @@ class Piet
 			this.Count := i
 			
 			this.Corners := [] ; Point := this.Corners[DP, CC]
+			this.Exits := []
 			
 			; These two methods work on two principles
 			; A) For loops don't delete their iterator once exiting the loop
