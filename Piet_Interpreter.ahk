@@ -25,9 +25,10 @@ if %1%
 else
 	FileSelectFile, sFile
 
+Count := A_TickCount
 MyPiet := new Piet(sFile)
 StdOut := MyPiet.Execute()
-MsgBox, % StdOut
+MsgBox, % "Painting finished in " A_TickCount - Count " milliseconds"
 ExitApp
 return
 
