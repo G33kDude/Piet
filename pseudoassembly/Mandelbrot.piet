@@ -1,0 +1,179 @@
+PUSH 1
+PUSH 13
+SUB
+; [y=-12]
+
+
+:OuterLoop
+; [y]
+PUSH 1
+PUSH 26
+SUB
+; [y,x=-25]
+
+:InnerLoop
+; [y,x]
+PUSH 1
+PUSH 1
+SUB
+DUP
+DUP
+; [y,x,i=0,a=0,b=0]
+
+:WhileStart
+DUP
+DUP
+MUL
+; [y,x,i,a,b,b^2]
+PUSH 3 ; Depth of 3
+PUSH 2 ; 2 rolls
+ROLL
+; [y,x,i,b,b^2,a]
+DUP
+DUP
+MUL
+; [y,x,i,b,b^2,a,a^2]
+PUSH 3 ; Depth of 3
+PUSH 2 ; 2 rolls
+ROLL
+; [y,x,i,b,a,a^2,b^2]
+ADD
+; [y,x,i,b,a,a*a+b*b]
+PUSH 4
+PUSH 5
+MUL
+DUP
+MUL
+; [y,x,i,b,a,aa+bb,400]
+PUSH 2
+PUSH 1
+ROLL
+; [y,x,i,b,a,400,aa+bb]
+GRTR
+; [y,x,i,b,a,<]
+PUSH 4
+PUSH 3
+ROLL
+DUP
+; [y,x,b,a,<,i,i]
+PUSH 5
+PUSH 1
+ROLL
+; [y,x,i,b,a,<,i]
+PUSH 9
+PUSH 2
+PUSH 1
+ROLL
+; [y,x,i,b,a,<,9,i]
+GRTR
+; [y,x,i,b,a,<,i<9]
+MUL ; In this case, logical AND
+
+NOT
+PTR ; GOTO WhileEnd
+
+; [y,x,i,b,a]
+DUP
+DUP
+MUL
+; [y,x,i,b,a,aa]
+PUSH 3
+PUSH 2
+ROLL
+; [y,x,i,a,aa,b]
+DUP
+DUP
+MUL
+; [y,x,i,a,aa,b,bb]
+PUSH 3
+PUSH 2
+ROLL
+; [y,x,i,a,b,bb,aa]
+PUSH 2
+PUSH 1
+ROLL
+SUB
+PUSH 10
+DIV
+; [y,x,i,a,b,(aa-bb)//Scale]
+PUSH 5
+PUSH 4
+ROLL
+DUP
+PUSH 6
+PUSH 1
+ROLL
+ADD
+; [y,x,i,a,b,t]
+PUSH 3
+PUSH 1
+ROLL
+; [y,x,i,t,a,b]
+MUL
+PUSH 5
+DIV
+; [y,x,i,t,2ab//Scale] ; (Simplified to ab//5, which is scale/2)
+PUSH 5
+PUSH 4
+ROLL
+DUP
+PUSH 6
+PUSH 1
+ROLL
+; [y,x,i,t,2ab//Scale,y]
+ADD
+; [y,x,i,a,b]
+PUSH 3
+PUSH 2
+ROLL
+PUSH 1
+ADD ; i++
+PUSH 3
+PUSH 1
+ROLL
+; [y,x,i,a,b]
+
+; GOTO WhileStart
+
+:WhileEnd
+POP
+POP
+PUSH 8
+GREATER
+; [y,x,i>=Max]
+PTR ; GOTO Star
+
+PUSH 8
+PUSH 4
+MUL
+OUTC ; Space
+
+:StarReturn
+PUSH 1
+ADD
+; [y,x]
+
+DUP
+PUSH 5
+DUP
+MUL
+GREATER
+NOT ; If !(x > 25)
+PTR ; GOTO InnerLoop
+
+PUSH 10
+OUTC ; Newline
+
+POP
+PUSH 1
+ADD
+; [y]
+DUP
+PUSH 4
+PUSH 3
+MUL
+GREATER
+NOT ; If !(y > 12)
+PTR ; GOTO OuterLoop
+
+; Terminate program

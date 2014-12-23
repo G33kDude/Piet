@@ -1,0 +1,182 @@
+push 1
+push 1
+sub
+> arrlen
+
+:MainLoop
+
+inC
+
+> char count arrlen MyChar
+
+dup ; If char is a newline
+push 10
+sub
+not
+ptr ; go to END
+
+push 1
+> char count arrlen MyChar i
+; GOTO CheckAll
+
+:CheckAll
+> char count arrlen MyChar i
+dup ; dup i
+> char count arrlen MyChar i i
+push 4 ; Bring arrlen to front
+push 3
+roll
+> char count MyChar i i arrlen
+dup
+> char count MyChar i i arrlen arrlen
+push 5 ; bury arrlen
+push 1
+roll
+> char count arrlen MyChar i i arrlen
+grtr ; if i > arrlen
+ptr ; goto AddNew
+; goto keepchecking
+
+:KeepChecking
+
+; --- Bring char to the top of the stack ---
+> char count arrlen MyChar i
+dup
+> char count arrlen MyChar i depth
+push 2 ; "char count"
+mul
+push 4 ; "arrlen MyChar i depth"
+add
+> char count arrlen MyChar i depth
+dup
+dup
+> char count arrlen MyChar i depth depth depth
+push 1
+sub
+> char count arrlen MyChar i depth depth depth-1
+roll
+> count arrlen MyChar i depth char
+
+; --- Compare MyChar against char ---
+dup
+> count arrlen MyChar i depth char char
+push 3 ; Bring depth to top of stack
+push 2
+roll
+> count arrlen MyChar i char char depth
+dup
+> count arrlen MyChar i char char depth depth
+push 4
+push 1
+roll
+> count arrlen MyChar i depth char char depth
+push 1 ; extra char
+add
+push 1 ; Bury char N deep
+roll
+> char count arrlen MyChar i depth char
+push 4
+push 3
+roll
+dup
+> char count arrlen i depth char MyChar MyChar
+push 5
+push 1
+roll
+> char count arrlen MyChar i depth char MyChar
+sub ; Finally we can compare
+not ; if equal
+ptr ; GOTO IncreaseCount
+; continue with loop
+> char count arrlen MyChar i depth
+pop
+
+push 1 ; Increase loop index
+add
+> char count arrlen MyChar i
+; GOTO CheckAll
+
+
+
+:IncreaseCount
+> char count arrlen MyChar i depth
+push 1 ; Bring count to top of stack
+sub ; sub1 since we want count not char now
+dup ; preserve depth
+dup
+push 1
+sub
+roll
+> char arrlen MyChar i depth count
+push 1 ; increase count
+add
+push 2 ; bring depth to top of stack
+push 1
+roll
+> char arrlen MyChar i count depth
+push 1
+sub ; sub1 since we are discarding depth, so we only have 3 variables to go past
+push 1
+roll
+> char count arrlen MyChar i
+pop ; pop i
+pop ; pop MyChar
+; GOTO MainLoop
+
+
+
+
+:AddNew
+> arrlen MyChar i
+pop ; pop "i"
+> arrlen MyChar
+push 1 ; 1 of this char
+> arrlen MyChar count
+push 3 ; Bury char and count
+push 2
+roll
+> char count arrlen
+push 1 ; Add new entry to length
+add
+
+> char count arrlen
+; GOTO MainLoop
+
+:End
+> char count arrlen MyChar
+pop ; remove MyChar
+:Display
+> char count arrlen
+dup
+push 1
+> char count arrlen arrlen 1
+push 2
+push 1
+roll
+> char count arrlen 1 arrlen
+greater ; if 1 > arrlen
+ptr ; END PROGRAM
+> char count arrlen
+push 3
+push 1
+roll
+> arrlen char count
+push 2
+push 1
+roll
+
+OutC ; Output Char
+
+push 9 ; Output "-"
+push 5
+mul
+OutC
+
+OutN ; Output Count
+
+push 10
+OutC ; Output newline
+
+push 1 ; decrement arrlen
+sub
+; GOTO Display
