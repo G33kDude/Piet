@@ -1,0 +1,67 @@
+:START
+
+PUSH 1
+PUSH 1
+SUB
+PUSH 8
+; [c, x]
+
+:LOOP
+; x -= 1
+PUSH 1
+SUB
+
+PUSH 2
+PUSH 1
+ROLL ; [d, c]
+
+INC ; 10, 48, or 49
+
+; [x, c, n]
+
+; If n == 10
+DUP
+PUSH 10
+SUB
+NOT
+PTR ; GOSUB RESET
+
+; [x, c, n]
+
+; Subtract 48 to get 0/1
+PUSH 6
+PUSH 8
+MUL
+SUB
+
+; [x, c, n]
+
+; c = n + c*2
+PUSH 2
+PUSH 1
+ROLL
+PUSH 2
+MUL
+ADD
+
+; [x, c]
+
+PUSH 2
+PUSH 1
+ROLL
+DUP
+NOT
+NOT
+
+; [c, x, bool(x)]
+
+PTR ; GOTO LOOP
+
+POP ; Discard x
+OUTC
+; GOTO START
+
+:RESET
+POP
+INC
+;RETURN
